@@ -178,7 +178,7 @@ N_MH_KEEP       = 200
 MH_PROPOSAL_STD = 0.5
 
 N_INIT     = 200
-T          = 20000
+T          = 5000
 EVAL_EVERY = 200
 
 H_BOUND    = 200
