@@ -214,8 +214,7 @@ def _compute_break_even_floor(mdp, alp, theta_ref, exog, feature_idx):
 def run_psmd(mdp, alp, lb_calc, ub_calc, cfg, run_seed=0):
     """
     Main PSMD loop.
-    Returns: thetabar, Thetabar, LB_history, LB_best, UB_history, UB_best,
-             best_thetabar, ell_hat, ell_hat_se
+    Returns: thetabar, Thetabar, LB_history, LB_best, UB_history, UB_best, best_thetabar
 
     run_seed controls every source of TRAINING randomness (the LP warm
     start's sampled points, DSampleHist, and the initial constraint-sampling
@@ -403,31 +402,5 @@ def run_psmd(mdp, alp, lb_calc, ub_calc, cfg, run_seed=0):
     print(f"\nFinal thetabar: {np.round(thetabar, 4)}")
     print(f"Best thetabar (at lowest UB={best_ub_val:.4f}): "
           f"{np.round(best_thetabar, 4)}")
-
-    # ── Certified SAA lower bound (Section 5.3) ───────────────────────────
-    # This was missing from the production pipeline (main.py hardcoded
-    # ell_hat/ell_hat_se to None) even though classes/bounds.py's
-    # SAALowerBound already implements it and functions/psmd_evaluate_
-    # approximation.py already calls it -- restored here so main.py gets
-    # the same certified bound the validation pipeline has had all along.
-    # Uses best_thetabar (the checkpoint actually reported/exported), not
-    # the final thetabar, to match what the rest of the pipeline reports.
-    ell_hat = ell_hat_se = None
-    final_lambdabar = lam_sum / eta_sum_acc if eta_sum_acc > 0 else 0.0
-    if getattr(cfg, 'COMPUTE_SAA_LB', True):
-        from classes.bounds import SAALowerBound
-        saa_lb = SAALowerBound(mdp, alp)
-        ell_hat, ell_hat_se = saa_lb.compute(
-            best_thetabar, final_lambdabar,
-            H_prime=getattr(cfg, 'SAA_H_PRIME', 100),
-            N_prime=getattr(cfg, 'SAA_N_PRIME', 500),
-        )
-        print(f"\nCertified SAA lower bound ell_hat(theta_bar) "
-              f"= {ell_hat:.4f} ± {ell_hat_se:.4f}  (kappa_bar={final_lambdabar:.2e}, "
-              f"Cbar={alp.Cbar:.3e})")
-        print(f"  Note: this bound is VALID (per Section 5.3's theory, now that "
-              f"Cbar is properly derived) but typically much looser than the "
-              f"ad hoc LP-based LB above -- see SAALowerBound's docstring.")
-
     return (thetabar, Thetabar, LB_history, LB_best,
-            UB_history, UB_best, best_thetabar, ell_hat, ell_hat_se)
+            UB_history, UB_best, best_thetabar)

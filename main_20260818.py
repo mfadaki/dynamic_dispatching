@@ -452,14 +452,17 @@ if __name__ == "__main__":
     lb  = LowerBound(mdp, alp)
     ub  = UpperBound(mdp, alp)
 
-    thetabar, Thetabar, LB_history, LB_best, UB_history, UB_best, best_thetabar, \
-        ell_hat, ell_hat_se = run_psmd(mdp, alp, lb, ub, cfg, run_seed=RUN_SEED)
-    # run_psmd now also returns the certified SAA lower bound (Section 5.3),
-    # computed internally via classes.bounds.SAALowerBound -- restored to
-    # match functions/psmd_evaluate_approximation.py's already-working
-    # version. print_summary/save_csv_exports already handle ell_hat=None
-    # gracefully (e.g. if COMPUTE_SAA_LB=False in inputs.py), so nothing
-    # else needs to change if it's ever disabled.
+    thetabar, Thetabar, LB_history, LB_best, UB_history, UB_best, best_thetabar = \
+        run_psmd(mdp, alp, lb, ub, cfg, run_seed=RUN_SEED)
+    # run_psmd returns exactly these 7 values (see its own docstring/return
+    # statement) -- it does not compute a certified SAA lower bound itself.
+    # ell_hat/ell_hat_se are left as None here rather than guessed at; if you
+    # have a certified-bound computation elsewhere (a different psmd.py, or
+    # a separate script), wire its output in here instead of leaving these
+    # as None. print_summary/save_csv_exports both already handle None
+    # gracefully -- the certified-bound line is just omitted, everything
+    # else still runs and saves correctly.
+    ell_hat, ell_hat_se = None, None
 
     print_policy(mdp, alp, best_thetabar)
     summary = print_summary(LB_history, UB_history, LB_best, UB_best, mdp, alp,
