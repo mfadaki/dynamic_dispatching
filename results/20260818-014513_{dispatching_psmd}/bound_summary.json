@@ -1,1 +1,0 @@
-{"tight_iter": 1200, "tight_lb": 12.279363060695065, "tight_ub": 12.04324937401942, "tight_gap_pct": -1.9605480160944557, "best_lb_independent": 12.67794125367292, "best_ub_independent": 12.04324937401942, "myopic_cost": 14.685281144603428, "myopic_cost_se": 0.5762518240731145, "psmd_vs_myopic_pct": 17.991019338127597}
