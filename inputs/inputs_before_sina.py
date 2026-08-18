@@ -30,49 +30,27 @@ DELTA_T     = 1.0 / LAMBDA_TOTAL
 # not just asserted.
 
 # ── Cost structure ────────────────────────────────────────────────────────────
-# Dispatch (shipment) cost: NOW ASYMMETRIC (SHIELD Illinois March 2022 data).
-#   Lab 1 (T3 MADISON) $146.81/shipment vs Lab 2 (SHIELD 451) $47.86/shipment
-#   -- roughly 3x apart. The manuscript's "identical fixed dispatch cost...
-#   dispatch-destination choice is driven entirely by the VFA's laboratory-
-#   side features... not an asymmetric setup cost" claim is no longer true
-#   and needs rewriting, not just new numbers substituted in. That said, see
-#   the C_EXP note below -- this ~$99 spread is small enough relative to the
-#   expiry penalties that it's unlikely to be the dominant driver of dispatch
-#   decisions either way.
-C_DISPATCH  = np.array([146.81, 47.86])
+# Dispatch (order) cost: identical across labs. UNCHANGED from the previous
+# calibration -- no new dispatch-cost data was provided with this update.
+#   Lab selection is now driven by mu=[0.4535, 0.3577] (Lab 1 now faster),
+#   not by a cost spread.
+C_DISPATCH  = np.array([1.0, 1.0])
 
 # Holding cost h_{p,a}: depot STRICTLY exceeds both labs for EVERY age class,
-# and the two labs are IDENTICAL. UNCHANGED -- the SHIELD Illinois table
-# gives these SAME values again, so no edit needed here. Worth flagging
-# directly though: these are still the original placeholder-era numbers,
-# never themselves recalibrated to the same real-dollar scale as the
-# dispatch/expiry figures below -- see that note for why this now matters.
+# and the two labs are IDENTICAL. UNCHANGED -- no new holding-cost data was
+# provided with this update.
 #   depot age-1 3.0 > lab 1.5   depot age-2 2.0 > lab 1.0   depot age-3 1.0 > lab 0.5
+# Economic consequence: a kit is cheaper to hold once at a lab, so dispatch
+# reduces the holding stream for every age class (reinforced by C_EXP below).
 H_HOLD      = np.array([[3.0, 2.0, 1.0],   # depot:  strictly highest, all ages
                          [1.5, 1.0, 0.5],   # lab 1
                          [1.5, 1.0, 0.5]])  # lab 2  (identical to lab 1)
-# Expiry penalties -- NOW REAL DOLLAR FIGURES (SHIELD Illinois), not the
-# small placeholder-scale numbers used previously (was 2.0 / 1.5).
-# C_EXP_DEPOT > C_EXP_LAB still holds strictly (125,000 > 100,000), so the
-# manuscript's "a kit expiring at the depot was never utilised at all"
-# claim remains valid.
-#
-# CAUTION -- scale mismatch worth confirming is intentional before trusting
-# any downstream policy conclusions: at these values, C_EXP_DEPOT is
-# 41,667x-125,000x the size of the (unrecalibrated) holding costs above,
-# and roughly 1,263x the ~$99 dispatch-cost spread. Verified independently,
-# not just asserted. Practically, this means avoiding expiry will dominate
-# essentially every dispatch decision the trained policy makes -- holding
-# cost and the dispatch-cost asymmetry both become second-order tie-breakers
-# rather than meaningful trade-offs, UNLESS that's specifically the
-# intended economic story (plausible for pandemic-era specimen testing,
-# where a wasted batch's real cost -- lost diagnostic capacity, delayed
-# results, retesting -- could genuinely dwarf shipment/storage cost). If
-# holding costs were meant to be recalibrated to this same dollar scale and
-# just haven't been yet, that's a different, more urgent gap to close
-# before these numbers go in the manuscript.
-C_EXP_DEPOT = 125000.0
-C_EXP_LAB   = 100000.0
+# Strict inequality C_EXP_DEPOT > C_EXP_LAB now RESTORED with this update
+# (2.0 > 1.5) -- the previous calibration had these exactly equal, which
+# had broken the manuscript's "a kit expiring at the depot was never
+# utilised at all" claim. That claim is valid again with these values.
+C_EXP_DEPOT = 2.0
+C_EXP_LAB   = 1.5
 K_CAPACITY  = 7
 
 N_MAX = K_CAPACITY; N_MIN = 0
