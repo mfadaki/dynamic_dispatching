@@ -48,9 +48,12 @@ C_DISPATCH  = np.array([146.81, 47.86])
 # never themselves recalibrated to the same real-dollar scale as the
 # dispatch/expiry figures below -- see that note for why this now matters.
 #   depot age-1 3.0 > lab 1.5   depot age-2 2.0 > lab 1.0   depot age-3 1.0 > lab 0.5
-H_HOLD      = np.array([[3.0, 2.0, 1.0],   # depot:  strictly highest, all ages
-                         [1.5, 1.0, 0.5],   # lab 1
-                         [1.5, 1.0, 0.5]])  # lab 2  (identical to lab 1)
+#H_HOLD      = np.array([[3.0, 2.0, 1.0],   # depot:  strictly highest, all ages
+#                         [1.5, 1.0, 0.5],   # lab 1
+#                         [1.5, 1.0, 0.5]])  # lab 2  (identical to lab 1)
+H_HOLD      = np.array([[694.44, 462.96, 231.48],   # depot:  strictly highest, all ages
+                         [520.83, 347.22, 173.61],   # lab 1
+                         [520.83, 347.22, 173.61]])  # lab 2  (identical to lab 1)
 # Expiry penalties -- NOW REAL DOLLAR FIGURES (SHIELD Illinois), not the
 # small placeholder-scale numbers used previously (was 2.0 / 1.5).
 # C_EXP_DEPOT > C_EXP_LAB still holds strictly (125,000 > 100,000), so the
@@ -200,7 +203,7 @@ N_MH_KEEP       = 200
 MH_PROPOSAL_STD = 0.5
 
 N_INIT     = 200
-T          = 5000
+T          = 50000
 EVAL_EVERY = 200
 
 H_BOUND    = 200

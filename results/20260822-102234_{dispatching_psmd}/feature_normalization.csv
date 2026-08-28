@@ -1,0 +1,8 @@
+basis_index,feature_name,feature_sigma
+0,const,1.0
+1,depot_age1,777.4001242786387
+2,depot_age2,517.3751638156696
+3,depot_age3,257.5260200624785
+4,lab_shortfall,0.5540330584962617
+5,imbalance,4.410096266364454
+6,exp_risk,212492.79925661915
