@@ -4,8 +4,11 @@ solve_exact_cplex.py
 Solves the EXACT dispatching MDP (full state enumeration, one LP variable
 per state -- no VFA, no basis functions, no sampling) via CPLEX, and saves
 every state's exact value V*(s) to results/<tag>/exact_values.csv (and
-.xlsx), for later structural-property checks (queue-balancing dominance,
-submodularity, etc.) against ground truth rather than an approximation.
+.xlsx), plus every (state,action) pair's exact Q(s,a) to
+results/<tag>/q_values.csv (and .xlsx, when it fits Excel's row limit --
+see save_q_values), for later structural-property checks (queue-balancing
+dominance, submodularity, etc.) against ground truth rather than an
+approximation.
 
 State enumeration, the exact one-step transition model, and the LP
 constraint construction (rhs_const, trans) below are lifted VERBATIM from
@@ -167,9 +170,9 @@ def solve_exact_lp_cplex(mdp, states, index, tau_grid):
     """Builds the SAME exact LP as evaluate_approximation.py's
     solve_exact_lp (one variable per state, constraints
     V(s_i) - gamma*sum_j P(j|i,a)*V(s_j) <= r(s_i,a) for every (i,a)),
-    solved via CPLEX instead of scipy. Returns (V_star, solver_used) --
-    solver_used is 'cplex' or 'scipy_highs_fallback', recorded explicitly
-    rather than left ambiguous.
+    solved via CPLEX instead of scipy. Returns (V_star, Q_values,
+    solver_used) -- solver_used is 'cplex' or 'scipy_highs_fallback',
+    recorded explicitly rather than left ambiguous.
     """
     M = len(states)
     actions = mdp.action_set
@@ -190,7 +193,7 @@ def solve_exact_lp_cplex(mdp, states, index, tau_grid):
     _stage("Solving")
     try:
         V_star = _solve_with_cplex(mdp, M, n_actions, rhs_const, trans)
-        return V_star, 'cplex'
+        solver_used = 'cplex'
     except Exception as e:
         msg = str(e)
         if 'Error  1016' in msg or 'Error 1016' in msg or 'Community Edition' in msg:
@@ -204,8 +207,37 @@ def solve_exact_lp_cplex(mdp, states, index, tau_grid):
                   "CPLEX license must be properly configured first.")
             print("!" * 70 + "\n")
             V_star = _solve_with_scipy(M, rhs_const, trans, mdp.gamma)
-            return V_star, 'scipy_highs_fallback'
-        raise
+            solver_used = 'scipy_highs_fallback'
+        else:
+            raise
+
+    Q_values = _compute_q_values(mdp, M, n_actions, rhs_const, trans, V_star)
+    return V_star, Q_values, solver_used
+
+
+def _compute_q_values(mdp, M, n_actions, rhs_const, trans, V_star):
+    """Q(s,a) = r(s,a) + gamma*E[V*(s')|s,a], computed directly from the
+    SAME rhs_const/trans already built for the LP above -- no re-querying
+    the MDP. In the SAME normalized units as V_star (both come from the
+    same normalized LP), so min_a Q(s,a) == V*(s) exactly at every state,
+    by construction of the exact-LP characterization of V* (the LP's own
+    constraints are V(s) <= r(s,a)+gamma*E[V(s')|s,a] for every a, tight
+    at the optimal action) -- checked below directly, not just asserted."""
+    _stage(f"Computing Q-values ({M:,} states x {n_actions} actions)")
+    Q = np.zeros((M, n_actions))
+    t0 = time.time()
+    for i in range(M):
+        for ai in range(n_actions):
+            cont = sum(p * V_star[j] for j, p in trans[i][ai])
+            Q[i, ai] = rhs_const[i, ai] + mdp.gamma * cont
+        _progress(i + 1, M, t0, "Q-value computation")
+
+    max_gap = float(np.max(np.abs(Q.min(axis=1) - V_star)))
+    print(f"  Verification: max|min_a Q(s,a) - V*(s)| = {max_gap:.2e} "
+          f"across all {M:,} states -- "
+          f"{'PASS' if max_gap < 1e-6 else 'FAIL, something is wrong -- do not trust these Q-values'}",
+          flush=True)
+    return Q
 
 
 def _solve_with_cplex(mdp, M, n_actions, rhs_const, trans):
@@ -301,6 +333,80 @@ def _solve_with_scipy(M, rhs_const, trans, gamma):
     return res.x
 
 
+def save_q_values(states, Q_values, cfg, solver_used, out_dir):
+    """Writes q_values.csv (and .xlsx): one row per (state, action) pair
+    -- LONG format, M*n_actions rows, not M rows like exact_values.csv/
+    .xlsx. Same state columns as exact_values.csv, plus 'action' (raw
+    int, matching cfg.ACTION_SET) and 'action_label' (human-readable:
+    'hold' / '->lab{p}', matching the action_label() convention already
+    used by this project's other diagnostic scripts, e.g.
+    diagnose_policy_disagreement.py)."""
+    os.makedirs(out_dir, exist_ok=True)
+    M, n_actions = Q_values.shape
+    n_rows = M * n_actions
+
+    col_names = []
+    for p in range(cfg.N_LABS + 1):
+        loc = 'depot' if p == 0 else f'lab{p}'
+        for a in range(cfg.L_AGE):
+            col_names.append(f'{loc}_age{a+1}')
+    col_names += ['tau', 'action', 'Q_value']
+
+    _stage(f"Building Q-value table ({M:,} states x {n_actions} actions "
+          f"= {n_rows:,} rows) -- vectorized, not a Python loop")
+    t0 = time.time()
+    n_inv = cfg.N_INV
+    state_part = np.concatenate([states[:, :n_inv], states[:, n_inv:n_inv + 1]], axis=1)
+    state_rows = np.repeat(state_part, n_actions, axis=0)       # each state's row repeated n_actions times, in order
+    action_col = np.tile(np.arange(n_actions), M).reshape(-1, 1)
+    q_col = Q_values.reshape(-1, 1)                             # row-major flatten matches np.repeat's row order above
+    rows = np.concatenate([state_rows, action_col, q_col], axis=1)
+    action_labels = ['hold' if a == 0 else f'->lab{a}' for a in np.tile(np.arange(n_actions), M)]
+    print(f"  Built {n_rows:,}-row table in {time.time()-t0:.1f}s", flush=True)
+
+    csv_path = os.path.join(out_dir, 'q_values.csv')
+    _stage(f"Writing Q-value CSV ({n_rows:,} rows)")
+    t0 = time.time()
+    header = ','.join(col_names)
+    np.savetxt(csv_path, rows, delimiter=',', header=header, comments='',
+              fmt='%.10g')
+    print(f"  Wrote {csv_path} in {time.time()-t0:.1f}s "
+          f"({n_rows:,} rows, solver={solver_used}). Numeric-only "
+          f"('action' is the raw int, e.g. 0=hold/1=->lab1/2=->lab2 -- see "
+          f"cfg.ACTION_SET); the human-readable action_label is in the "
+          f".xlsx version only, where the write is already row-by-row so "
+          f"adding a text column costs nothing extra there.", flush=True)
+
+    EXCEL_ROW_LIMIT = 1_048_576
+    if n_rows + 1 > EXCEL_ROW_LIMIT:   # +1 for the header row
+        print(f"  SKIPPING .xlsx for Q-values: {n_rows:,} rows + header "
+              f"exceeds Excel's hard limit of {EXCEL_ROW_LIMIT:,} rows per "
+              f"sheet. q_values.csv above is complete and has everything; "
+              f"use that instead.", flush=True)
+        return
+
+    try:
+        import openpyxl
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Q Values"
+        ws.append(col_names + ['action_label'])
+        _stage(f"Writing Q-value Excel ({n_rows:,} rows -- row-by-row, "
+              f"this is the slowest export step: {n_actions}x the row "
+              f"count of exact_values.xlsx)")
+        t0 = time.time()
+        for i, (r, lbl) in enumerate(zip(rows, action_labels)):
+            ws.append(list(r) + [lbl])
+            _progress(i + 1, n_rows, t0, "Q-value Excel row-writing")
+        xlsx_path = os.path.join(out_dir, 'q_values.xlsx')
+        wb.save(xlsx_path)
+        print(f"  Wrote {xlsx_path}", flush=True)
+    except ImportError:
+        print("openpyxl not available -- q_values.xlsx not written, "
+              "q_values.csv is still complete.")
+
+
 # =============================================================================
 # CSV / Excel export
 # =============================================================================
@@ -383,12 +489,13 @@ if __name__ == "__main__":
     print(f"  Enumerated {len(states):,} states "
           f"(total elapsed so far: {time.time()-_t_script_start:.1f}s)", flush=True)
 
-    V_star, solver_used = solve_exact_lp_cplex(mdp, states, index, tau_grid)
+    V_star, Q_values, solver_used = solve_exact_lp_cplex(mdp, states, index, tau_grid)
     print(f"Solved via: {solver_used}")
     print(f"E[V*] (uniform over states) = {V_star.mean():.4f}")
 
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            'results', f'exact_cplex_{_CONFIG_MODULE_NAME}')
     save_state_values(states, V_star, cfg, solver_used, out_dir)
+    save_q_values(states, Q_values, cfg, solver_used, out_dir)
 
     _stage(f"Done -- total wall-clock time: {time.time()-_t_script_start:.1f}s")

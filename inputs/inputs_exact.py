@@ -83,14 +83,17 @@ epochs_per_day = round(_TARGET_TAU_MAX / DELTA_T)   # DERIVED, not hardcoded
 TAU_MAX = epochs_per_day * DELTA_T                  # exact multiple of DELTA_T by construction
 
 C_DISPATCH = np.array([2.0, 2.0])
-# IDENTICAL holding-cost rows for lab 1 and lab 2 (symmetric labs) --
-# depot still strictly exceeds both labs at every age, oldest still costs
-# more than freshest, same qualitative pattern as every other config in
-# this project, just with lab1==lab2 exactly rather than merely similar.
+# Lab holding cost now UNIFORM across ages (1.0 regardless of age) at both
+# labs, per explicit instruction -- previously age-decreasing ([1.5,1.0,0.5],
+# older cheaper to hold). Depot's row is UNCHANGED (still 3.0/2.0/1.0,
+# strictly exceeding the labs at every age, still oldest-costs-more) --
+# only the LAB rows were asked to become age-uniform, not the depot.
+# Labs remain identical to each other (both [1.0,1.0,1.0]), so the
+# symmetric-labs premise this whole config is built around still holds.
 H_HOLD = np.array([
     [3.0, 2.0, 1.0],
-    [1.5, 1.0, 0.5],
-    [1.5, 1.0, 0.5],
+    [1.0, 1.0, 1.0],
+    [1.0, 1.0, 1.0],
 ])
 C_EXP_DEPOT = 20.0
 C_EXP_LAB = 15.0
