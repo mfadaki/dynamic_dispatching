@@ -90,11 +90,19 @@ C_DISPATCH = np.array([2.0, 2.0])
 # only the LAB rows were asked to become age-uniform, not the depot.
 # Labs remain identical to each other (both [1.0,1.0,1.0]), so the
 # symmetric-labs premise this whole config is built around still holds.
+
+#H_HOLD = np.array([
+#    [3.0, 2.0, 1.0],
+#    [1.0, 1.0, 1.0],
+#    [1.0, 1.0, 1.0],
+#])
+
 H_HOLD = np.array([
-    [3.0, 2.0, 1.0],
+    [1.0, 1.0, 1.0],
     [1.0, 1.0, 1.0],
     [1.0, 1.0, 1.0],
 ])
+
 C_EXP_DEPOT = 20.0
 C_EXP_LAB = 15.0
 

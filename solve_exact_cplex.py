@@ -19,22 +19,24 @@ evaluate_approximation.py already validates elsewhere in this project. The
 only thing that changes is which solver turns those constraints into V*:
 CPLEX here, scipy.optimize.linprog(method='highs') there.
 
-Only classes/mdp_evaluate_approximation.py is needed (NOT
-classes/alp_evaluate_approximation.py) -- this script never touches
-phi()/theta at all, since it computes the exact value function directly,
-with no approximation architecture in the loop. This also means it is
-completely unaffected by which basis-function count ("richfeat" vs
-canonical) any given inputs_evaluate_approximation_*.py module declares;
-those fields are simply never read here.
+Files this script depends on (and nothing else from the project):
+    inputs/inputs_exact.py     -- the instance parameters
+    classes/mdp_exact.py       -- the MDP dynamics, importing its parameters
+                                  directly from inputs/inputs_exact.py
+NO other config module is used or imported anywhere in this exact-solve
+path: there is no command-line config option, no alias, and no
+sys.modules substitution. classes/mdp_exact.py is a copy of
+classes/mdp_evaluate_approximation.py whose only functional difference is
+that one import line.
 
-Uses the SAME isolated MDP as the rest of the validation pipeline
-(classes/mdp_evaluate_approximation.py), never the production classes/mdp.py
--- consistent with the isolation discipline used throughout this project.
+classes/alp_evaluate_approximation.py is NOT needed -- this script never
+touches phi()/theta at all, since it computes the exact value function
+directly, with no approximation architecture in the loop. The basis-function
+fields in inputs_exact.py (NO_BASIS_FN, THETA_*) are therefore never read.
 
 Usage
 -----
-    python solve_exact_cplex.py               # uses inputs_exact.py by default
-    python solve_exact_cplex.py <other_config_module_name>
+    python solve_exact_cplex.py
 
 CPLEX licensing note
 ---------------------
@@ -56,7 +58,6 @@ import sys
 import os
 import time
 import itertools
-import importlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -87,18 +88,48 @@ def _progress(done, total, t_start, label, min_interval_s=2.0):
           f"elapsed={elapsed:6.1f}s  ETA={eta:6.1f}s", flush=True)
 
 
-def _clean_argv():
-    return [a for a in sys.argv[1:] if not a.startswith('-')]
+_CONFIG_MODULE_NAME = 'inputs_exact'      # fixed: the only config this script uses
+
+# Drop any cached copies first, so a Python session that already imported
+# these modules (e.g. an interactive kernel where you edited inputs_exact.py
+# and re-ran) picks up the CURRENT files rather than stale ones.
+for _m in ('inputs.inputs_exact', 'classes.mdp_exact'):
+    sys.modules.pop(_m, None)
+
+import inputs.inputs_exact as cfg                       # noqa: E402
+import classes.mdp_exact as _mdp_module                 # noqa: E402
+from classes.mdp_exact import MDP                       # noqa: E402
+
+_MDP_PARAM_NAMES = [
+    'GAMMA', 'N_LABS', 'LAB_IDS', 'L_AGE', 'TAU_MAX', 'DELTA_T',
+    'LAMBDA_AGE', 'LAMBDA', 'MU', 'LAMBDA_TOTAL', 'C_DISPATCH', 'H_HOLD',
+    'C_EXP_DEPOT', 'C_EXP_LAB', 'K_CAPACITY', 'N_MAX', 'N_MIN', 'N_INV',
+    'N_STATE', 'STATE_BOUNDS', 'ACTION_SET', 'ACTION_BOUNDS',
+]
 
 
-_argv = _clean_argv()
-_CONFIG_MODULE_NAME = _argv[0] if len(_argv) >= 1 else 'inputs_exact'
+def _verify_mdp_uses_inputs_exact():
+    """Cheap safeguard: every parameter the MDP module holds must equal
+    inputs_exact's. True by construction now (classes/mdp_exact.py imports
+    straight from inputs_exact), but it stops the run loudly if that module
+    is ever edited to read parameters from somewhere else, instead of
+    silently solving a different instance under inputs_exact's name."""
+    bad = []
+    for name in _MDP_PARAM_NAMES:
+        mdp_val = np.asarray(getattr(_mdp_module, name), dtype=float)
+        cfg_val = np.asarray(getattr(cfg, name), dtype=float)
+        if mdp_val.shape != cfg_val.shape or not np.array_equal(mdp_val, cfg_val):
+            bad.append(f"  {name}: MDP module has {getattr(_mdp_module, name)!r}, "
+                       f"inputs_exact has {getattr(cfg, name)!r}")
+    if bad:
+        raise RuntimeError(
+            "The MDP is NOT using inputs_exact.py's parameters -- refusing "
+            "to solve a different instance than the one requested:\n"
+            + "\n".join(bad)
+        )
 
-small_cfg = importlib.import_module(f'inputs.{_CONFIG_MODULE_NAME}')
-sys.modules['inputs.inputs'] = small_cfg
 
-import inputs.inputs as cfg                                   # noqa: E402
-from classes.mdp_evaluate_approximation import MDP             # noqa: E402
+_verify_mdp_uses_inputs_exact()
 
 
 # =============================================================================
@@ -474,7 +505,7 @@ def save_state_values(states, V_star, cfg, solver_used, out_dir):
 
 if __name__ == "__main__":
     _t_script_start = time.time()
-    print(f"Config: {_CONFIG_MODULE_NAME}")
+    print(f"Config: inputs/{_CONFIG_MODULE_NAME}.py (the only config this script uses)")
     print(f"N_LABS={cfg.N_LABS}, L_AGE={cfg.L_AGE}, K_CAPACITY={cfg.K_CAPACITY}, "
           f"epochs_per_day={cfg.epochs_per_day}")
     print(f"MU={list(cfg.MU)}  (symmetric labs check: "
