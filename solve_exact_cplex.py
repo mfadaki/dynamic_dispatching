@@ -3,12 +3,19 @@ solve_exact_cplex.py
 ======================
 Solves the EXACT dispatching MDP (full state enumeration, one LP variable
 per state -- no VFA, no basis functions, no sampling) via CPLEX, and saves
-every state's exact value V*(s) to results/<tag>/exact_values.csv (and
-.xlsx), plus every (state,action) pair's exact Q(s,a) to
-results/<tag>/q_values.csv (and .xlsx, when it fits Excel's row limit --
-see save_q_values), for later structural-property checks (queue-balancing
-dominance, submodularity, etc.) against ground truth rather than an
-approximation.
+every state's exact value V*(s) to exact_values.csv (and .xlsx), plus every
+(state,action) pair's exact Q(s,a) to q_values.csv (and .xlsx, when it fits
+Excel's row limit -- see save_q_values), for later structural-property
+checks (queue-balancing dominance, submodularity, etc.) against ground
+truth rather than an approximation.
+
+Output folder: results/<YYYYmmdd-HHMMSS>_{exact}/ -- same naming as this
+project's other runs (date-time, then the method in braces, e.g.
+20260911-040524_{exact}), containing exact_values.csv/.xlsx,
+q_values.csv/.xlsx, and inputs_exact.py: a byte-for-byte copy of the
+config as it was when this run STARTED (captured at startup, not at the
+end, so editing inputs_exact.py while a multi-hour solve is running cannot
+change what gets recorded).
 
 State enumeration, the exact one-step transition model, and the LP
 constraint construction (rhs_const, trans) below are lifted VERBATIM from
@@ -58,6 +65,7 @@ import sys
 import os
 import time
 import itertools
+from datetime import datetime
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -130,6 +138,53 @@ def _verify_mdp_uses_inputs_exact():
 
 
 _verify_mdp_uses_inputs_exact()
+
+
+def _capture_inputs_exact_source():
+    """Read inputs_exact.py's bytes NOW (so the copy saved with the results
+    is exactly what this run used, even if the file is edited during the
+    solve) and check that this source text reproduces the parameters that
+    were actually loaded. Python reuses cached bytecode when a file's mtime
+    (1 s resolution) and size are unchanged, so a fast same-size edit can
+    leave the run using OLD values while the file on disk shows NEW ones --
+    this stops that at startup, before hours of solving, rather than saving
+    a copy that disagrees with the results."""
+    path = cfg.__file__
+    with open(path, 'rb') as f:
+        raw = f.read()
+    ns = {'__name__': 'inputs_exact_source_check', '__file__': path}
+    exec(compile(raw, path, 'exec'), ns)
+    bad = []
+    for name in _MDP_PARAM_NAMES + ['epochs_per_day']:
+        src_val = np.asarray(ns[name], dtype=float)
+        run_val = np.asarray(getattr(cfg, name), dtype=float)
+        if src_val.shape != run_val.shape or not np.array_equal(src_val, run_val):
+            bad.append(f"  {name}: file on disk gives {ns[name]!r}, loaded module has {getattr(cfg, name)!r}")
+    if bad:
+        raise RuntimeError(
+            "inputs_exact.py on disk does not match the parameters actually "
+            "loaded (stale cached bytecode). Delete the inputs/__pycache__ "
+            "folder and re-run:\n" + "\n".join(bad)
+        )
+    return raw
+
+
+_INPUTS_EXACT_SOURCE = _capture_inputs_exact_source()
+
+
+def _make_results_dir(method='exact'):
+    """results/<YYYYmmdd-HHMMSS>_{<method>}/ -- the same naming as this
+    project's saveResultsFn (timestamp taken when the results are saved),
+    e.g. 20260911-040524_{exact}. Anchored to this script's own folder, not
+    the current working directory. Also writes the inputs_exact.py copy."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           'results', f"{stamp}_{{{method}}}")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, 'inputs_exact.py'), 'wb') as f:
+        f.write(_INPUTS_EXACT_SOURCE)
+    print(f"  Results folder: {out_dir}", flush=True)
+    return out_dir
 
 
 # =============================================================================
@@ -524,8 +579,8 @@ if __name__ == "__main__":
     print(f"Solved via: {solver_used}")
     print(f"E[V*] (uniform over states) = {V_star.mean():.4f}")
 
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           'results', f'exact_cplex_{_CONFIG_MODULE_NAME}')
+    _stage("Saving results")
+    out_dir = _make_results_dir('exact')
     save_state_values(states, V_star, cfg, solver_used, out_dir)
     save_q_values(states, Q_values, cfg, solver_used, out_dir)
 

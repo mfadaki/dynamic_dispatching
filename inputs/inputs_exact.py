@@ -46,15 +46,30 @@ CPLEX, and the saved output records which solver actually ran.
 """
 import numpy as np
 
+# 2 Ages
+L_AGE = 2
+
+H_HOLD = np.array([
+    [1.0, 1.0],
+    [1.0, 1.0],
+    [1.0, 1.0],])
+C_DISPATCH = np.array([10.0, 10.0])
+C_EXP_DEPOT = 100.0
+C_EXP_LAB = 100.0
+LAMBDA_AGE = np.array([0.1, 0.1]) #Arrival Rates
+MU = np.array([0.2, 0.2]) #Processing rates
+K_CAPACITY = 5
+
+
 # ── Problem structure ──────────────────────────────────────────────────────
 N_LABS = 2
 LAB_IDS = list(range(1, N_LABS + 1))
-L_AGE = 3
+#L_AGE = 3
 
 GAMMA = 0.95
 
 # ── Instance sizing ────────────────────────────────────────────────────────
-K_CAPACITY = 2
+#K_CAPACITY = 2
 
 # tau_max is the REAL day length (8 hours, matching the case-study
 # convention) -- FIXED. Delta_t = 1/Lambda is fixed by the arrival/
@@ -74,15 +89,17 @@ K_CAPACITY = 2
 # 8.0/Delta_t = 16.8 here, rounds to 17, giving tau_max=8.095 hours.
 _TARGET_TAU_MAX = 8.0
 
-LAMBDA_AGE = np.array([0.3, 0.3, 0.3])
+#LAMBDA_AGE = np.array([0.3, 0.3, 0.3])
 LAMBDA = float(LAMBDA_AGE.sum())
-MU = np.array([0.6, 0.6])                # IDENTICAL processing rates (symmetric labs)
+#MU = np.array([0.6, 0.6])                # IDENTICAL processing rates (symmetric labs)
 LAMBDA_TOTAL = float(LAMBDA_AGE.sum() + MU.sum())
 DELTA_T = 1.0 / LAMBDA_TOTAL
 epochs_per_day = round(_TARGET_TAU_MAX / DELTA_T)   # DERIVED, not hardcoded
 TAU_MAX = epochs_per_day * DELTA_T                  # exact multiple of DELTA_T by construction
 
-C_DISPATCH = np.array([2.0, 2.0])
+#C_DISPATCH = np.array([2.0, 2.0])
+
+
 # Lab holding cost now UNIFORM across ages (1.0 regardless of age) at both
 # labs, per explicit instruction -- previously age-decreasing ([1.5,1.0,0.5],
 # older cheaper to hold). Depot's row is UNCHANGED (still 3.0/2.0/1.0,
@@ -97,14 +114,14 @@ C_DISPATCH = np.array([2.0, 2.0])
 #    [1.0, 1.0, 1.0],
 #])
 
-H_HOLD = np.array([
-    [1.0, 1.0, 1.0],
-    [1.0, 1.0, 1.0],
-    [1.0, 1.0, 1.0],
-])
+#H_HOLD = np.array([
+#    [1.0, 1.0, 1.0],
+#    [1.0, 1.0, 1.0],
+#    [1.0, 1.0, 1.0],
+#])
 
-C_EXP_DEPOT = 20.0
-C_EXP_LAB = 15.0
+#C_EXP_DEPOT = 20.0
+#C_EXP_LAB = 15.0
 
 N_MAX = K_CAPACITY
 N_MIN = 0
